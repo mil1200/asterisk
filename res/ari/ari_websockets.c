@@ -963,18 +963,6 @@ static void *outbound_session_handler_thread(void *obj)
 	session->thread = pthread_self();
 	session->connected = 0;
 
-	/*
-	 * Although Asterisk initiates this connection, requests received from the
-	 * remote websocket server are an external protocol.  This dedicated thread
-	 * must therefore reject escalating dialplan functions just like an inbound
-	 * connection does.
-	 */
-	if (ast_thread_inhibit_escalations()) {
-		ast_log(LOG_ERROR, "%s: Failed to inhibit privilege escalations\n",
-			session->session_id);
-		goto done;
-	}
-
 	while(1) {
 		RAII_VAR(struct ast_websocket *, astws, NULL, ast_websocket_unref);
 		RAII_VAR(struct ast_variable *, upgrade_headers, NULL, ast_variables_destroy);
@@ -1078,7 +1066,6 @@ static void *outbound_session_handler_thread(void *obj)
 			session->session_id);
 	}
 
-done:
 	ast_debug(3, "%s: Stopping outbound websocket thread RC: %d\n",
 		session->session_id, (int)ao2_ref(session, 0));
 	session->thread = 0;
