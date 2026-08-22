@@ -974,8 +974,13 @@ static void *outbound_session_handler_thread(void *obj)
 			session->session_id);
 		goto done;
 	}
+	if (ast_thread_user_interface_set(1)) {
+		ast_log(LOG_ERROR, "%s: Failed to set user interface status\n",
+			session->session_id);
+		goto done;
+	}
 
-	while(1) {
+	while (1) {
 		RAII_VAR(struct ast_websocket *, astws, NULL, ast_websocket_unref);
 		RAII_VAR(struct ast_variable *, upgrade_headers, NULL, ast_variables_destroy);
 		enum ast_websocket_result result;
