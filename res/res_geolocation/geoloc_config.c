@@ -611,13 +611,12 @@ int geoloc_config_unload(void)
 {
 	ast_cli_unregister_multiple(geoloc_location_cli_commands, ARRAY_LEN(geoloc_location_cli_commands));
 
-	ast_sorcery_object_unregister(geoloc_sorcery, "profile");
-	ast_sorcery_object_unregister(geoloc_sorcery, "location");
-
 	if (geoloc_sorcery) {
+		ast_sorcery_object_unregister(geoloc_sorcery, "profile");
+		ast_sorcery_object_unregister(geoloc_sorcery, "location");
 		ast_sorcery_unref(geoloc_sorcery);
+		geoloc_sorcery = NULL;
 	}
-	geoloc_sorcery = NULL;
 
 	return 0;
 }
@@ -672,7 +671,7 @@ int geoloc_config_load(void)
 
 	ast_sorcery_apply_config(geoloc_sorcery, "location");
 	result = ast_sorcery_apply_default(geoloc_sorcery, "location", "config", "geolocation.conf,criteria=type=location");
-	if (result != AST_SORCERY_APPLY_SUCCESS) {
+	if (result == AST_SORCERY_APPLY_FAIL) {
 		ast_log(LOG_ERROR, "Failed to apply defaults for geoloc location object with sorcery\n");
 		return AST_MODULE_LOAD_DECLINE;
 	}
