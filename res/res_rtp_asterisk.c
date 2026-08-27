@@ -6326,6 +6326,10 @@ static int update_rtt_stats(struct ast_rtp *rtp, unsigned int lsr, unsigned int 
 	timeval2ntp(now, &msw, &lsw);
 
 	lsr_a = ((msw & 0x0000ffff) << 16) | ((lsw & 0xffff0000) >> 16);
+	if (lsr_a - dlsr < lsr) {
+		return 1;
+	}
+
 	rtt = lsr_a - lsr - dlsr;
 	rtt_msw = (rtt & 0xffff0000) >> 16;
 	rtt_lsw = (rtt & 0x0000ffff);
@@ -6345,11 +6349,8 @@ static int update_rtt_stats(struct ast_rtp *rtp, unsigned int lsr, unsigned int 
 	 */
 	rtt_tv.tv_usec = (rtt_lsw * 15625) >> 10;
 	rtp->rtcp->rtt = (double)rtt_tv.tv_sec + ((double)rtt_tv.tv_usec / 1000000);
-	if (lsr_a - dlsr < lsr) {
-		return 1;
-	}
-
 	rtp->rtcp->accumulated_transit += rtp->rtcp->rtt;
+
 	if (rtp->rtcp->rtt_count == 0 || rtp->rtcp->minrtt > rtp->rtcp->rtt) {
 		rtp->rtcp->minrtt = rtp->rtcp->rtt;
 	}
@@ -6452,9 +6453,16 @@ static double calc_media_experience_score(struct ast_rtp_instance *instance,
 	 * jitter scaled according to its standard deviation. The scaling is done in order
 	 * to increase jitter's weight since a higher deviation can result in poorer overall
 	 * quality.
+	 *
+	 * normdevrtt is the mean round trip time in seconds. The G.107's delay-impairment
+	 * model is based on one-way so we need to cut it in half before converting to
+	 * milliseconds.
+	 *
+	 * normdev_rxjitter and stdev_rxjitter are also in seconds and are converted to
+	 * milliseconds to match.
 	 */
-	double effective_latency = (normdevrtt * 1000)
-		+ ((normdev_rxjitter * 2) * (stdev_rxjitter / 3))
+	double effective_latency = ((normdevrtt / 2) * 1000)
+		+ ((normdev_rxjitter * 1000 * 2) * (stdev_rxjitter * 1000 / 3))
 		+ 10;
 
 	/*
@@ -6505,7 +6513,7 @@ static void update_reported_mes_stats(struct ast_rtp *rtp)
 {
 	double mes = calc_media_experience_score(rtp->owner,
 		rtp->rtcp->normdevrtt,
-		rtp->rtcp->reported_jitter,
+		rtp->rtcp->reported_normdev_jitter,
 		rtp->rtcp->reported_stdev_jitter,
 		rtp->rtcp->reported_normdev_lost);
 
@@ -6526,7 +6534,7 @@ static void update_reported_mes_stats(struct ast_rtp *rtp)
 	ast_debug_rtcp(2, "%s: rtt: %.9f j: %.9f sjh: %.9f lost: %.9f mes: %4.1f\n",
 		ast_rtp_instance_get_channel_id(rtp->owner),
 		rtp->rtcp->normdevrtt,
-				rtp->rtcp->reported_jitter,
+				rtp->rtcp->reported_normdev_jitter,
 				rtp->rtcp->reported_stdev_jitter,
 				rtp->rtcp->reported_normdev_lost, mes);
 }
@@ -6540,7 +6548,7 @@ static void update_local_mes_stats(struct ast_rtp *rtp)
 {
 	rtp->rxmes = calc_media_experience_score(rtp->owner,
 		rtp->rtcp->normdevrtt,
-		rtp->rxjitter,
+		rtp->rtcp->normdev_rxjitter,
 		rtp->rtcp->stdev_rxjitter,
 		rtp->rtcp->normdev_rxlost);
 
@@ -6560,7 +6568,7 @@ static void update_local_mes_stats(struct ast_rtp *rtp)
 	ast_debug_rtcp(2, "   %s: rtt: %.9f j: %.9f sjh: %.9f lost: %.9f mes: %4.1f\n",
 		ast_rtp_instance_get_channel_id(rtp->owner),
 		rtp->rtcp->normdevrtt,
-				rtp->rxjitter,
+				rtp->rtcp->normdev_rxjitter,
 				rtp->rtcp->stdev_rxjitter,
 				rtp->rtcp->normdev_rxlost, rtp->rxmes);
 }
